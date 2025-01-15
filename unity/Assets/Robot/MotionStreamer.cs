@@ -6,6 +6,7 @@ using System.Net.Sockets;
 using TMPro;
 using UnityEngine.UI;
 using System;
+using System.Collections;
 
 /// <summary>
 /// Extension methods for Unity's Vector3 class to convert to array format.
@@ -134,6 +135,10 @@ public class MotionStreamer : MonoBehaviour
     /// </summary>
     private float batteryPercent = 0;
 
+    //private bool connectionFailed = false;
+    //private double nextConnectRetry = 0.0;
+    //private int connectionRetries = 0;
+
     #region NetworkTables Configuration
     /// <summary>
     /// Application name for NetworkTables connection
@@ -219,6 +224,21 @@ public class MotionStreamer : MonoBehaviour
     /// </summary>
     private void ConnectToRobot()
     {
+        //if (connectionFailed)
+        //{
+        //    if (Time.timeAsDouble < nextConnectRetry)
+        //    {
+        //        return;
+        //    }
+
+        //    if (connectionRetries <= 0)
+        //    {
+        //        nextConnectRetry = Time.timeAsDouble + 1.0;
+        //        connectionRetries = 120;
+        //        return;
+        //    }
+        //}
+
         if (useAddress == true)
         {
             ipAddress = getIP();
@@ -233,10 +253,13 @@ public class MotionStreamer : MonoBehaviour
                    .Where(ip => ip.AddressFamily == AddressFamily.InterNetwork)
                    .ToArray();
                 ipAddress = ipv4Addresses[0].ToString();
+                //connectionFailed = false;
             }
             catch (Exception ex)
             {
                 Debug.Log($"Error resolving DNS name: {ex.Message}");
+                //connectionRetries--;
+                //connectionFailed = true;
             }
 
             useAddress = true;
@@ -287,10 +310,11 @@ public class MotionStreamer : MonoBehaviour
         rotation = cameraRig.centerEyeAnchor.rotation;
         eulerAngles = cameraRig.centerEyeAnchor.eulerAngles;
         batteryPercent = SystemInfo.batteryLevel * 100;
+        Vector3 correctedPosition = position - cameraRig.centerEyeAnchor.forward * 9.25f * 0.0254f;
 
         frcDataSink.PublishValue("/questnav/frameCount", frameIndex);
         frcDataSink.PublishValue("/questnav/timestamp", timeStamp);
-        frcDataSink.PublishValue("/questnav/position", position.ToArray());
+        frcDataSink.PublishValue("/questnav/position", correctedPosition.ToArray());
         frcDataSink.PublishValue("/questnav/quaternion", rotation.ToArray());
         frcDataSink.PublishValue("/questnav/eulerAngles", eulerAngles.ToArray());
         frcDataSink.PublishValue("/questnav/batteryPercent", batteryPercent);
