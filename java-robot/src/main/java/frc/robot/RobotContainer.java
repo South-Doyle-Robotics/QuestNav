@@ -13,9 +13,13 @@ import edu.wpi.first.math.geometry.Translation2d;
 import edu.wpi.first.math.trajectory.Trajectory;
 import edu.wpi.first.math.trajectory.TrajectoryConfig;
 import edu.wpi.first.math.trajectory.TrajectoryGenerator;
+import edu.wpi.first.networktables.GenericEntry;
 import edu.wpi.first.wpilibj.PS4Controller;
 import edu.wpi.first.wpilibj.XboxController;
 import edu.wpi.first.wpilibj.XboxController.Button;
+import edu.wpi.first.wpilibj.shuffleboard.BuiltInWidgets;
+import edu.wpi.first.wpilibj.shuffleboard.Shuffleboard;
+import edu.wpi.first.wpilibj.shuffleboard.ShuffleboardTab;
 import frc.robot.Constants.AutoConstants;
 import frc.robot.Constants.DriveConstants;
 import frc.robot.Constants.OIConstants;
@@ -35,6 +39,8 @@ import java.util.List;
 
 public class RobotContainer {
   private final DriveSubsystem m_robotDrive;
+  ShuffleboardTab m_qnavtab = Shuffleboard.getTab("QuestNav");
+  GenericEntry m_qnavConnectedStatus = m_qnavtab.add("Connected", false).withWidget(BuiltInWidgets.kBooleanBox).getEntry();
 
   // The driver's controller
   XboxController m_driverController = new XboxController(OIConstants.kDriverControllerPort);
@@ -58,7 +64,7 @@ public class RobotContainer {
             () -> m_robotDrive.drive(
                 -MathUtil.applyDeadband(m_driverController.getLeftY(), OIConstants.kDriveDeadband),
                 -MathUtil.applyDeadband(m_driverController.getLeftX(), OIConstants.kDriveDeadband),
-                -MathUtil.applyDeadband(m_driverController.getRawAxis(3), OIConstants.kHeadingDeadband),
+                -MathUtil.applyDeadband(m_driverController.getRightX(), OIConstants.kHeadingDeadband),
                 true, true),
             m_robotDrive));
   }

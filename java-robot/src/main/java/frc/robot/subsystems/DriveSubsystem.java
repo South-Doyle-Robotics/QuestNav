@@ -17,13 +17,21 @@ import edu.wpi.first.math.kinematics.SwerveModulePosition;
 import edu.wpi.first.math.kinematics.SwerveModuleState;
 import edu.wpi.first.networktables.DoubleSubscriber;
 import edu.wpi.first.networktables.FloatArraySubscriber;
+import edu.wpi.first.networktables.GenericEntry;
 import edu.wpi.first.networktables.IntegerPublisher;
 import edu.wpi.first.networktables.IntegerSubscriber;
 import edu.wpi.first.networktables.NetworkTable;
 import edu.wpi.first.networktables.NetworkTableInstance;
+import edu.wpi.first.networktables.StructPublisher;
 import edu.wpi.first.util.WPIUtilJNI;
+import edu.wpi.first.wpilibj.shuffleboard.BuiltInWidgets;
+import edu.wpi.first.wpilibj.shuffleboard.Shuffleboard;
+import edu.wpi.first.wpilibj.shuffleboard.ShuffleboardTab;
+import edu.wpi.first.wpilibj.shuffleboard.SimpleWidget;
+import edu.wpi.first.wpilibj.shuffleboard.WidgetType;
 import frc.robot.QuestNav;
 import frc.robot.Constants.DriveConstants;
+import frc.utils.ShuffleUtils;
 import frc.utils.SwerveUtils;
 import edu.wpi.first.wpilibj2.command.SubsystemBase;
 import org.littletonrobotics.junction.Logger;
@@ -50,7 +58,10 @@ public class DriveSubsystem extends SubsystemBase {
       DriveConstants.kRearRightTurningCanId,
       DriveConstants.kBackRightChassisAngularOffset);
 
-  private QuestNav questNav = new QuestNav();
+  private QuestNav m_questNav = new QuestNav();
+
+  private final StructPublisher<Pose2d> m_robotPose = NetworkTableInstance.getDefault().getStructTopic("Robot Pose (QuestNav)", Pose2d.struct).publish();
+  private final StructPublisher<Pose2d> m_robotPoseOdometry = NetworkTableInstance.getDefault().getStructTopic("Robot Pose (Odometry)", Pose2d.struct).publish();
 
   // Slew rate filter variables for tuning lateral acceleration
   private double m_currentRotation = 0.0;
@@ -66,7 +77,7 @@ public class DriveSubsystem extends SubsystemBase {
   // Odometry class for tracking the robot's pose
   SwerveDriveOdometry m_odometry = new SwerveDriveOdometry(
       DriveConstants.kDriveKinematics,
-      questNav.getPose().getRotation(),
+      m_questNav.getPose().getRotation(),
       new SwerveModulePosition[] {
           m_frontLeft.getPosition(),
           m_frontRight.getPosition(),
@@ -77,23 +88,29 @@ public class DriveSubsystem extends SubsystemBase {
   // Create a new DriveSubsystem
   public DriveSubsystem() {
     anglePIDController.enableContinuousInput(-180, 180);
-    questNav.zeroHeading();
+    m_questNav.zeroHeading();
   }
 
   // Update odometry in the periodic block
   @Override
   public void periodic() {
     m_odometry.update(
-        questNav.getPose().getRotation(),
+        m_questNav.getPose().getRotation(),
         new SwerveModulePosition[] {
             m_frontLeft.getPosition(),
             m_frontRight.getPosition(),
             m_rearLeft.getPosition(),
             m_rearRight.getPosition()
         });
+
+    m_robotPose.set(invertRotation(m_questNav.getPose()));
+    m_robotPoseOdometry.set(invertRotation(getPose()));
+    GenericEntry qnavConnectionStatus = ShuffleUtils.getEntryByName(Shuffleboard.getTab("QuestNav"), "Connected");
+    qnavConnectionStatus.setBoolean(m_questNav.connected());
+
     Logger.recordOutput("SwerveOdometry", m_odometry.getPoseMeters());
-    Logger.recordOutput("OculusPosituion", questNav.getPose());
-    Logger.recordOutput("OculusQuaternion", questNav.getQuaternion());
+    Logger.recordOutput("OculusPosituion", m_questNav.getPose());
+    Logger.recordOutput("OculusQuaternion", m_questNav.getQuaternion());
   }
 
   // Return the currently-estimated pose of the robot
@@ -101,15 +118,20 @@ public class DriveSubsystem extends SubsystemBase {
     return m_odometry.getPoseMeters();
   }
 
+  public Pose2d invertRotation(Pose2d pose) {
+    Pose2d newPose = new Pose2d(pose.getTranslation(), Rotation2d.fromDegrees(360).minus(pose.getRotation()));
+    return newPose;
+  }
+
   // Reset the odometry to the specified pose
   public void resetOdometry(Pose2d pose) {
-    questNav.zeroPosition();
+    m_questNav.zeroPosition();
     m_frontLeft.resetEncoders();
     m_frontRight.resetEncoders();
     m_rearLeft.resetEncoders();
     m_rearRight.resetEncoders();
     m_odometry.resetPosition(
-        questNav.getPose().getRotation(),
+        m_questNav.getPose().getRotation(),
         new SwerveModulePosition[] {
             m_frontLeft.getPosition(),
             m_frontRight.getPosition(),
@@ -196,7 +218,7 @@ public class DriveSubsystem extends SubsystemBase {
     double xSpeedDelivered = xSpeedCommanded * DriveConstants.kMaxSpeedMetersPerSecond;
     double ySpeedDelivered = ySpeedCommanded * DriveConstants.kMaxSpeedMetersPerSecond;
     double rotDelivered = compensateAngle() * DriveConstants.kMaxAngularSpeed;
-    double oculusYaw = questNav.getPose().getRotation().getDegrees();
+    double oculusYaw = m_questNav.getPose().getRotation().getDegrees();
     Logger.recordOutput("OculusYaw", oculusYaw);
 
     var swerveModuleStates = DriveConstants.kDriveKinematics.toSwerveModuleStates(
@@ -212,7 +234,7 @@ public class DriveSubsystem extends SubsystemBase {
   }
 
   private double compensateAngle() {
-    var ret = -anglePIDController.calculate(questNav.getPose().getRotation().getDegrees() - 180);
+    var ret = -anglePIDController.calculate(m_questNav.getPose().getRotation().getDegrees() - 180);
     Logger.recordOutput("PIDOut", ret);
     return ret;
   }
@@ -245,23 +267,23 @@ public class DriveSubsystem extends SubsystemBase {
 
   // Return the robot heading in degrees, between -180 and 180 degrees
   public double getHeading() {
-    return questNav.getPose().getRotation().getDegrees();
+    return m_questNav.getPose().getRotation().getDegrees();
   }
 
   // Get the rotation rate of the robot
   public double getTurnRate() {
-    return questNav.getPose().getRotation().getDegrees() * (DriveConstants.kGyroReversed ? -1.0 : 1.0);
+    return m_questNav.getPose().getRotation().getDegrees() * (DriveConstants.kGyroReversed ? -1.0 : 1.0);
   }
 
   public void zeroPosition() {
-    questNav.zeroPosition();
+    m_questNav.zeroPosition();
   }
 
   public void cleanupQuestNavMessages() {
-    questNav.cleanUpQuestNavMessages();
+    m_questNav.cleanUpQuestNavMessages();
   }
 
   public void zeroHeading() {
-    questNav.zeroHeading();
+    m_questNav.zeroHeading();
   }
 }

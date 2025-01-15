@@ -26,6 +26,7 @@ public class Robot extends LoggedRobot {
    * This function is run when the robot finishes booting and should be used for any
    * initialization code.
    */
+  @SuppressWarnings("resource")
   @Override
   public void robotInit() {
     // Set up the main robot container.
@@ -42,7 +43,7 @@ public class Robot extends LoggedRobot {
       Logger.setReplaySource(new WPILOGReader(logPath));
       Logger.addDataReceiver(new WPILOGWriter(LogFileUtil.addPathSuffix(logPath, "_sim")));
     }
-    Logger.start();
+    // Logger.start();
   }
 
   /**
