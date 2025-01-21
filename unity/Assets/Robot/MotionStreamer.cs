@@ -7,6 +7,7 @@ using TMPro;
 using UnityEngine.UI;
 using System;
 using System.Collections;
+using NUnit.Framework;
 
 /// <summary>
 /// Extension methods for Unity's Vector3 class to convert to array format.
@@ -138,6 +139,7 @@ public class MotionStreamer : MonoBehaviour
     //private bool connectionFailed = false;
     //private double nextConnectRetry = 0.0;
     //private int connectionRetries = 0;
+    private string[] m_msgQueue = { };
 
     #region NetworkTables Configuration
     /// <summary>
@@ -184,9 +186,9 @@ public class MotionStreamer : MonoBehaviour
     void Start()
     {
         OVRPlugin.systemDisplayFrequency = 120.0f;
+        Application.logMessageReceivedThreaded += HandleLog;
         teamNumber = PlayerPrefs.GetString("TeamNumber", "9999");
         setInputBox(teamNumber);
-        teamInput.Select();
         ConnectToRobot();
         teamUpdateButton.onClick.AddListener(UpdateTeamNumber);
         teamInput.onSelect.AddListener(OnInputFieldSelected);
@@ -291,6 +293,8 @@ public class MotionStreamer : MonoBehaviour
         frcDataSink.PublishTopic("/questnav/quaternion", "float[]");
         frcDataSink.PublishTopic("/questnav/eulerAngles", "float[]");
         frcDataSink.PublishTopic("/questnav/batteryPercent", "double");
+        frcDataSink.PublishTopic("/questnav/message", "int[]");
+        frcDataSink.PublishTopic("/questnav/msgMISO", "int");
         frcDataSink.Subscribe("/questnav/mosi", 0.1, false, false, false);
         frcDataSink.Subscribe("/questnav/init/position", 0.1, false, false, false);
         frcDataSink.Subscribe("/questnav/init/eulerAngles", 0.1, false, false, false);
@@ -319,6 +323,42 @@ public class MotionStreamer : MonoBehaviour
         frcDataSink.PublishValue("/questnav/eulerAngles", eulerAngles.ToArray());
         frcDataSink.PublishValue("/questnav/batteryPercent", batteryPercent);
     }
+
+    private void SendRobotMessage(string msg)
+    {
+        return;
+
+        m_msgQueue.Prepend(msg);
+        if (m_msgQueue.Length > 5)
+        {
+            m_msgQueue = m_msgQueue.Take(m_msgQueue.Count() - 1).ToArray();
+        }
+    }
+
+    private void FlushRobotMessage()
+    {
+        string msg = m_msgQueue.First();
+        m_msgQueue = m_msgQueue.Skip(1).ToArray();
+
+        char[] ogArray = msg.ToCharArray();
+        int[] msgArray = new int[msg.Length + 1];
+
+        for (int i = 0; i < msg.Length; i++)
+            msgArray[i] = ogArray[i];
+        msgArray[msg.Length] = 0;
+
+        frcDataSink.PublishValue("/questnav/message", msgArray);
+        frcDataSink.PublishValue("/questnav/msgMISO", 1);
+    }
+
+    private void HandleLog(string str, string stackTrace, LogType type)
+    {
+        if (frcDataSink.Client.Connected())
+        {
+            if (!str.Contains("render graph API"))
+                SendRobotMessage(str);
+        }
+    }
     #endregion
 
     #region Command Processing Methods
@@ -327,6 +367,24 @@ public class MotionStreamer : MonoBehaviour
     /// </summary>
     private void ProcessCommands()
     {
+        if (false)
+        {
+            long msgCmd = frcDataSink.GetLong("/questnav/msgMOSI");
+            switch (msgCmd)
+            {
+                case 1:
+                    SendRobotMessage("hi robot");
+                    break;
+                default:
+                    if (m_msgQueue.Length > 0)
+                    {
+                        FlushRobotMessage();
+                    }
+                    frcDataSink.PublishValue("/questnav/msgMISO", 0);
+                    break;
+            }
+        }
+
         command = frcDataSink.GetLong("/questnav/mosi");
 
         if (resetInProgress && command == 0)
