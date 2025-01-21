@@ -25,6 +25,7 @@ import frc.robot.Constants.DriveConstants;
 import frc.robot.Constants.OIConstants;
 import frc.robot.subsystems.DriveSubsystem;
 import edu.wpi.first.wpilibj2.command.Command;
+import edu.wpi.first.wpilibj2.command.InstantCommand;
 import edu.wpi.first.wpilibj2.command.RunCommand;
 import edu.wpi.first.wpilibj2.command.SwerveControllerCommand;
 import edu.wpi.first.wpilibj2.command.button.JoystickButton;
@@ -62,8 +63,8 @@ public class RobotContainer {
         // Turning is controlled by the X axis of the right stick.
         new RunCommand(
             () -> m_robotDrive.drive(
-                -MathUtil.applyDeadband(m_driverController.getLeftY(), OIConstants.kDriveDeadband),
-                -MathUtil.applyDeadband(m_driverController.getLeftX(), OIConstants.kDriveDeadband),
+                MathUtil.applyDeadband(m_driverController.getLeftY(), OIConstants.kDriveDeadband),
+                MathUtil.applyDeadband(m_driverController.getLeftX(), OIConstants.kDriveDeadband),
                 -MathUtil.applyDeadband(m_driverController.getRightX(), OIConstants.kHeadingDeadband),
                 true, true),
             m_robotDrive));
@@ -87,6 +88,9 @@ public class RobotContainer {
 
     new JoystickButton(m_driverController, Button.kY.value)
         .whileTrue(new RunCommand(() -> m_robotDrive.zeroPosition(), m_robotDrive));
+
+    new JoystickButton(m_driverController, Button.kX.value)
+        .onTrue(new InstantCommand(() -> m_robotDrive.questNavTestMessage(), m_robotDrive));
   }
 
   /**

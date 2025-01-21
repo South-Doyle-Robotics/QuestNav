@@ -87,7 +87,10 @@ public class DriveSubsystem extends SubsystemBase {
 
   // Create a new DriveSubsystem
   public DriveSubsystem() {
+    setQuestConnectionStatus(false);
     anglePIDController.enableContinuousInput(-180, 180);
+    m_questNav.setInitialPose(new Pose2d(new Translation2d(0, 0), new Rotation2d()));
+    // m_questNav.zeroPosition();
     m_questNav.zeroHeading();
   }
 
@@ -105,12 +108,20 @@ public class DriveSubsystem extends SubsystemBase {
 
     m_robotPose.set(invertRotation(m_questNav.getPose()));
     m_robotPoseOdometry.set(invertRotation(getPose()));
-    GenericEntry qnavConnectionStatus = ShuffleUtils.getEntryByName(Shuffleboard.getTab("QuestNav"), "Connected");
-    qnavConnectionStatus.setBoolean(m_questNav.connected());
+    setQuestConnectionStatus(m_questNav.connected());
 
+    m_questNav.checkMessages();
     Logger.recordOutput("SwerveOdometry", m_odometry.getPoseMeters());
     Logger.recordOutput("OculusPosituion", m_questNav.getPose());
     Logger.recordOutput("OculusQuaternion", m_questNav.getQuaternion());
+  }
+
+  private void setQuestConnectionStatus(boolean connected) {
+    ShuffleUtils.getEntryByName(Shuffleboard.getTab("QuestNav"), "Connected").setBoolean(connected);
+  }
+
+  public void questNavTestMessage() {
+    m_questNav.testMessages();
   }
 
   // Return the currently-estimated pose of the robot

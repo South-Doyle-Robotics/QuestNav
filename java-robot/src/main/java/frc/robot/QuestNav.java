@@ -1,15 +1,19 @@
 package frc.robot;
 
+import java.nio.charset.StandardCharsets;
+
 import edu.wpi.first.math.geometry.Pose2d;
 import edu.wpi.first.math.geometry.Quaternion;
 import edu.wpi.first.math.geometry.Rotation2d;
 import edu.wpi.first.math.geometry.Translation2d;
+import edu.wpi.first.networktables.DoubleArrayPublisher;
 import edu.wpi.first.networktables.DoubleSubscriber;
 import edu.wpi.first.networktables.FloatArraySubscriber;
 import edu.wpi.first.networktables.IntegerPublisher;
 import edu.wpi.first.networktables.IntegerSubscriber;
 import edu.wpi.first.networktables.NetworkTable;
 import edu.wpi.first.networktables.NetworkTableInstance;
+import edu.wpi.first.networktables.StringSubscriber;
 import edu.wpi.first.wpilibj.RobotController;
 
 public class QuestNav {
@@ -18,6 +22,7 @@ public class QuestNav {
   NetworkTable nt4Table = nt4Instance.getTable("questnav");
   private IntegerSubscriber questMiso = nt4Table.getIntegerTopic("miso").subscribe(0);
   private IntegerPublisher questMosi = nt4Table.getIntegerTopic("mosi").publish();
+  private DoubleArrayPublisher initPose = nt4Table.getDoubleArrayTopic("resetpose").publish();
 
   // Subscribe to the Network Tables questnav data topics
   private DoubleSubscriber questTimestamp = nt4Table.getDoubleTopic("timestamp").subscribe(0.0f);
@@ -67,6 +72,30 @@ public class QuestNav {
     resetPosition = getPose();
     if (questMiso.get() != 99) {
       questMosi.set(1);
+    }
+  }
+
+  public void setInitialPose(Pose2d pose) {
+    if (questMiso.get() == 99) {
+      initPose.set(new double[] {pose.getX(), pose.getY(), pose.getRotation().getDegrees()});
+      questMosi.set(2);
+    }
+  }
+
+  public void testMessages() {
+    if (questMiso.get() != 99) {
+      System.out.printf("pinging quest status...\n");
+      questMosi.set(4);
+    }
+  }
+
+  public void checkMessages() {
+    // message code 92
+    if (questMiso.get() == 92) {
+      byte[] message = nt4Table.getEntry("message").getRaw(new String("oops").getBytes());
+      String str = new String(message, StandardCharsets.US_ASCII);
+      System.out.printf("quest status message: %s\n", str);
+      questMosi.set(0);
     }
   }
 
