@@ -22,6 +22,8 @@ public class QuestNav {
   NetworkTable nt4Table = nt4Instance.getTable("questnav");
   private IntegerSubscriber questMiso = nt4Table.getIntegerTopic("miso").subscribe(0);
   private IntegerPublisher questMosi = nt4Table.getIntegerTopic("mosi").publish();
+  private IntegerSubscriber m_msgMISO = nt4Table.getIntegerTopic("msgMISO").subscribe(0);
+  private IntegerPublisher m_msgMOSI = nt4Table.getIntegerTopic("msgMOSI").publish();
   private DoubleArrayPublisher initPose = nt4Table.getDoubleArrayTopic("resetpose").publish();
 
   // Subscribe to the Network Tables questnav data topics
@@ -31,13 +33,26 @@ public class QuestNav {
   private FloatArraySubscriber questEulerAngles = nt4Table.getFloatArrayTopic("eulerAngles").subscribe(new float[]{0.0f, 0.0f, 0.0f});
   private DoubleSubscriber questBatteryPercent = nt4Table.getDoubleTopic("batteryPercent").subscribe(0.0f);
 
+  private String m_lastQuestMessage = new String();
+  private double m_lastQuestMessageTime = 0.0;
+
   // Local heading helper variables
   private float yaw_offset = 0.0f;
-  private Pose2d resetPosition = new Pose2d();
+  private double m_initialYaw = 0.0;
+  private Pose2d resetPose = new Pose2d();
+
+  public QuestNav() {
+    zeroHeading();
+  }
 
   // Gets the Quest's measured position.
   public Pose2d getPose() {
-    return new Pose2d(getQuestNavPose().minus(resetPosition).getTranslation(), Rotation2d.fromDegrees(getOculusYaw()));
+    Pose2d pose = getQuestNavPose();
+    
+    return new Pose2d(
+      pose.getTranslation().minus(resetPose.getTranslation()),
+      pose.getRotation().minus(resetPose.getRotation())
+    );
   }
 
   // Gets the battery percent of the Quest.
@@ -68,10 +83,11 @@ public class QuestNav {
   }
 
   // Zero the absolute 3D position of the robot (similar to long-pressing the quest logo)
-  public void zeroPosition() {
-    resetPosition = getPose();
+  public void resetPose() {
+    System.out.printf("Resetting zero pose to current...\n");
+    resetPose = getPose();
     if (questMiso.get() != 99) {
-      questMosi.set(1);
+     questMosi.set(1);
     }
   }
 
@@ -83,19 +99,34 @@ public class QuestNav {
   }
 
   public void testMessages() {
-    if (questMiso.get() != 99) {
-      System.out.printf("pinging quest status...\n");
-      questMosi.set(4);
+    if (m_msgMISO.get() == 0) {
+      System.out.printf("testing QuestNav message system...\n");
+      m_msgMOSI.set(1);
     }
   }
 
+  public void testMessagesOff() {
+    m_msgMOSI.set(0);
+  }
+
   public void checkMessages() {
-    // message code 92
-    if (questMiso.get() == 92) {
-      byte[] message = nt4Table.getEntry("message").getRaw(new String("oops").getBytes());
-      String str = new String(message, StandardCharsets.US_ASCII);
-      System.out.printf("quest status message: %s\n", str);
-      questMosi.set(0);
+    if (m_msgMISO.get() == 1) {
+      long[] message = nt4Table.getEntry("message").getIntegerArray(new long[] {0});
+      
+      char[] msgBytes = new char[message.length];
+      for (int i = 0; i < message.length; i++)
+        msgBytes[i] = (char)message[i];
+      String msgStr = new String(msgBytes);
+
+      boolean renderMsg = msgStr.contains("render graph API");
+      boolean shouldDisplay = (double)System.currentTimeMillis() * 0.001 > m_lastQuestMessageTime + 0.25 || !msgStr.contentEquals(m_lastQuestMessage);
+      if (shouldDisplay) {
+        m_lastQuestMessage = msgStr;
+        m_lastQuestMessageTime = (double)System.currentTimeMillis() * 0.001;
+        System.out.printf("QuestNav -> %s\n", msgStr);
+      }
+
+      m_msgMOSI.set(0);
     }
   }
 
@@ -110,6 +141,7 @@ public class QuestNav {
   private float getOculusYaw() {
     float[] eulerAngles = questEulerAngles.get();
     var ret = eulerAngles[1] - yaw_offset;
+    ret -= m_initialYaw;
     ret %= 360;
     if (ret < 0) {
       ret += 360;
@@ -123,7 +155,7 @@ public class QuestNav {
   }
 
   private Pose2d getQuestNavPose() {
-    var oculousPositionCompensated = getQuestNavTranslation().minus(new Translation2d(0, 0.1651)); // 6.5
+    var oculousPositionCompensated = getQuestNavTranslation();
     return new Pose2d(oculousPositionCompensated, Rotation2d.fromDegrees(getOculusYaw()));
   }
 }

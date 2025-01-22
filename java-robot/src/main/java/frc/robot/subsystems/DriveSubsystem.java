@@ -5,6 +5,7 @@
 package frc.robot.subsystems;
 
 import edu.wpi.first.math.controller.PIDController;
+import edu.wpi.first.wpilibj.DriverStation;
 import edu.wpi.first.math.filter.SlewRateLimiter;
 import edu.wpi.first.math.geometry.Pose2d;
 import edu.wpi.first.math.geometry.Quaternion;
@@ -35,6 +36,11 @@ import frc.utils.ShuffleUtils;
 import frc.utils.SwerveUtils;
 import edu.wpi.first.wpilibj2.command.SubsystemBase;
 import org.littletonrobotics.junction.Logger;
+// PathPlanner Imports
+import com.pathplanner.lib.auto.AutoBuilder;
+import com.pathplanner.lib.config.PIDConstants;
+import com.pathplanner.lib.config.RobotConfig;
+import com.pathplanner.lib.controllers.PPHolonomicDriveController;
 
 public class DriveSubsystem extends SubsystemBase {
   // Create MAXSwerveModules
@@ -71,7 +77,7 @@ public class DriveSubsystem extends SubsystemBase {
   private SlewRateLimiter m_rotLimiter = new SlewRateLimiter(DriveConstants.kRotationalSlewRate);
   private double m_prevTime = WPIUtilJNI.now() * 1e-6;
   private Pose2d resetPosition = new Pose2d(new Translation2d(0, Rotation2d.fromDegrees(0)), Rotation2d.fromDegrees(0));
-  private double angleSetpoint = 0.0;
+  private double m_angleSetpoint = 0.0;
   private PIDController anglePIDController = new PIDController(1.0/60.0, 0, 0);
 
   // Odometry class for tracking the robot's pose
@@ -87,11 +93,41 @@ public class DriveSubsystem extends SubsystemBase {
 
   // Create a new DriveSubsystem
   public DriveSubsystem() {
-    setQuestConnectionStatus(false);
     anglePIDController.enableContinuousInput(-180, 180);
-    m_questNav.setInitialPose(new Pose2d(new Translation2d(0, 0), new Rotation2d()));
-    // m_questNav.zeroPosition();
-    m_questNav.zeroHeading();
+    // m_questNav.setInitialPose(new Pose2d(new Translation2d(0, 0), new Rotation2d()));
+    zeroHeading();
+
+    // PPlanner Config
+    RobotConfig ppconfig = null;
+    try{
+      ppconfig = RobotConfig.fromGUISettings();
+    } catch (Exception e) {
+      e.printStackTrace();
+    }
+
+    AutoBuilder.configure(
+            this::getPose, // Robot pose supplier
+            this::resetQuestNav, // Method to reset odometry (will be called if your auto has a starting pose)
+            this::getSpeeds, // ChassisSpeeds supplier. MUST BE ROBOT RELATIVE
+            (speeds, feedforwards) -> setSpeeds(speeds), // Method that will drive the robot given ROBOT RELATIVE ChassisSpeeds. Also optionally outputs individual module feedforwards
+            new PPHolonomicDriveController( // PPHolonomicController is the built in path following controller for holonomic drive trains
+                    new PIDConstants(2.0, 0.0, 0.0), // Translation PID constants
+                    new PIDConstants(2.0, 0.0, 0.0) // Rotation PID constants
+            ),
+            ppconfig,
+            () -> {
+              // Boolean supplier that controls when the path will be mirrored for the red alliance
+              // This will flip the path being followed to the red side of the field.
+              // THE ORIGIN WILL REMAIN ON THE BLUE SIDE
+
+              var alliance = DriverStation.getAlliance();
+              if (alliance.isPresent()) {
+                return alliance.get() == DriverStation.Alliance.Red;
+              }
+              return false;
+            },
+            this
+    );
   }
 
   // Update odometry in the periodic block
@@ -106,8 +142,8 @@ public class DriveSubsystem extends SubsystemBase {
             m_rearRight.getPosition()
         });
 
-    m_robotPose.set(invertRotation(m_questNav.getPose()));
-    m_robotPoseOdometry.set(invertRotation(getPose()));
+    m_robotPose.set(invertRotation(getPose()));
+    m_robotPoseOdometry.set(invertRotation(getPoseOdometry()));
     setQuestConnectionStatus(m_questNav.connected());
 
     m_questNav.checkMessages();
@@ -117,15 +153,25 @@ public class DriveSubsystem extends SubsystemBase {
   }
 
   private void setQuestConnectionStatus(boolean connected) {
-    ShuffleUtils.getEntryByName(Shuffleboard.getTab("QuestNav"), "Connected").setBoolean(connected);
+    GenericEntry state = ShuffleUtils.getEntryByName(Shuffleboard.getTab("QuestNav"), "Connected");
+    if (state != null)
+      state.setBoolean(connected);
   }
 
   public void questNavTestMessage() {
     m_questNav.testMessages();
   }
 
+  public void questNavTestMessageNot() {
+    m_questNav.testMessagesOff();
+  }
+
   // Return the currently-estimated pose of the robot
   public Pose2d getPose() {
+    return m_questNav.getPose();
+  }
+
+  public Pose2d getPoseOdometry() {
     return m_odometry.getPoseMeters();
   }
 
@@ -136,7 +182,7 @@ public class DriveSubsystem extends SubsystemBase {
 
   // Reset the odometry to the specified pose
   public void resetOdometry(Pose2d pose) {
-    m_questNav.zeroPosition();
+    m_questNav.resetPose();
     m_frontLeft.resetEncoders();
     m_frontRight.resetEncoders();
     m_rearLeft.resetEncoders();
@@ -150,6 +196,10 @@ public class DriveSubsystem extends SubsystemBase {
             m_rearRight.getPosition()
         },
         pose);
+  }
+
+  public void resetQuestNav(Pose2d pose) {
+    m_questNav.setInitialPose(pose);
   }
 
   /**
@@ -215,15 +265,15 @@ public class DriveSubsystem extends SubsystemBase {
       m_currentRotation = rot;
     }
     if (Math.abs(rot) > 0.05) {
-      angleSetpoint -= Math.copySign(Math.pow(rot, 2) * 8, rot);
-      if (angleSetpoint > 360) {
-        angleSetpoint -= 360;
-      } else if (angleSetpoint < 0) {
-        angleSetpoint += 360;
+      m_angleSetpoint -= Math.copySign(Math.pow(rot, 2) * 8, rot);
+      if (m_angleSetpoint > 360) {
+        m_angleSetpoint -= 360;
+      } else if (m_angleSetpoint < 0) {
+        m_angleSetpoint += 360;
       }
     }
-    anglePIDController.setSetpoint(angleSetpoint - 180);
-    Logger.recordOutput("angleSetpoint", angleSetpoint);
+    anglePIDController.setSetpoint(m_angleSetpoint - 180);
+    Logger.recordOutput("angleSetpoint", m_angleSetpoint);
 
     // Convert the commanded speeds to the correct units for the drivetrain
     double xSpeedDelivered = xSpeedCommanded * DriveConstants.kMaxSpeedMetersPerSecond;
@@ -268,6 +318,23 @@ public class DriveSubsystem extends SubsystemBase {
     m_rearRight.setDesiredState(desiredStates[3]);
   }
 
+  public SwerveModuleState[] getModuleStates() {
+    return new SwerveModuleState[] {
+      m_frontLeft.getState(),
+      m_frontRight.getState(),
+      m_rearLeft.getState(),
+      m_rearRight.getState()
+    };
+  }
+
+  public void setSpeeds(ChassisSpeeds speeds) {
+    setModuleStates(DriveConstants.kDriveKinematics.toSwerveModuleStates(speeds));
+  }
+
+  public ChassisSpeeds getSpeeds() {
+    return DriveConstants.kDriveKinematics.toChassisSpeeds(getModuleStates());
+  }
+
   // Zero the encoders on the swerve modules
   public void resetEncoders() {
     m_frontLeft.resetEncoders();
@@ -287,7 +354,7 @@ public class DriveSubsystem extends SubsystemBase {
   }
 
   public void zeroPosition() {
-    m_questNav.zeroPosition();
+    m_questNav.resetPose();
   }
 
   public void cleanupQuestNavMessages() {
@@ -295,6 +362,8 @@ public class DriveSubsystem extends SubsystemBase {
   }
 
   public void zeroHeading() {
+    m_angleSetpoint -= m_questNav.getPose().getRotation().getDegrees();
+    anglePIDController.setSetpoint(0.0);
     m_questNav.zeroHeading();
   }
 }

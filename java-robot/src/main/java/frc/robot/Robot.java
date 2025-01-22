@@ -36,7 +36,7 @@ public class Robot extends LoggedRobot {
     if (isReal()) {
       Logger.addDataReceiver(new WPILOGWriter());
       Logger.addDataReceiver(new NT4Publisher());
-      new PowerDistribution(1, ModuleType.kAutomatic);
+      new PowerDistribution(1, ModuleType.kRev);
     } else {
       setUseTiming(false);
       String logPath = LogFileUtil.findReplayLog();

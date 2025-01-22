@@ -4,7 +4,9 @@
 
 package frc.robot;
 
-import com.revrobotics.CANSparkBase.IdleMode;
+import com.revrobotics.spark.*;
+import com.revrobotics.spark.config.*;
+import com.revrobotics.spark.config.SparkBaseConfig.*;
 
 import edu.wpi.first.math.geometry.Translation2d;
 import edu.wpi.first.math.kinematics.SwerveDriveKinematics;
@@ -26,7 +28,7 @@ public final class Constants {
   public static final class DriveConstants {
     // Driving Parameters - Note that these are not the maximum capable speeds of
     // the robot, rather the allowed maximum speeds
-    public static final double kMaxSpeedMetersPerSecond = 4.4;
+    public static final double kMaxSpeedMetersPerSecond = 1;
     public static final double kMaxAngularSpeed = 2 * Math.PI; // radians per second
 
     // Full-field speeds and feeds:
