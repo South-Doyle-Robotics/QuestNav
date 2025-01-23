@@ -38,11 +38,12 @@ public class QuestNav {
 
   // Local heading helper variables
   private float yaw_offset = 0.0f;
-  private double m_initialYaw = 0.0;
+  private float[] pos_offset = new float[] {0.0f, 0.0f};
   private Pose2d resetPose = new Pose2d();
 
   public QuestNav() {
     zeroHeading();
+    zeroPosition();
   }
 
   // Gets the Quest's measured position.
@@ -80,6 +81,23 @@ public class QuestNav {
   public void zeroHeading() {
     float[] eulerAngles = questEulerAngles.get();
     yaw_offset = eulerAngles[1];
+  }
+
+  public void zeroPosition() {
+    float[] pos = questPosition.get();
+    pos_offset[0] = pos[2];
+    pos_offset[1] = -pos[0];
+  }
+
+  public void setPose(Pose2d pose) {
+    Translation2d pos = pose.getTranslation();
+    Rotation2d rot = pose.getRotation();
+
+    zeroPosition();
+    zeroHeading();
+    pos_offset[0] -= pos.getX();
+    pos_offset[1] -= pos.getY();
+    yaw_offset -= rot.getDegrees();
   }
 
   // Zero the absolute 3D position of the robot (similar to long-pressing the quest logo)
@@ -141,7 +159,6 @@ public class QuestNav {
   private float getOculusYaw() {
     float[] eulerAngles = questEulerAngles.get();
     var ret = eulerAngles[1] - yaw_offset;
-    ret -= m_initialYaw;
     ret %= 360;
     if (ret < 0) {
       ret += 360;
@@ -149,13 +166,19 @@ public class QuestNav {
     return ret;
   }
 
+  private float[] getOculusPos() {
+    float[] pos = questPosition.get();
+    float x = pos[2] - pos_offset[0];
+    float y = -pos[0] - pos_offset[1];
+    return new float[] {x, y};
+  }
+
   private Translation2d getQuestNavTranslation() {
-    float[] questnavPosition = questPosition.get();
-    return new Translation2d(questnavPosition[2], -questnavPosition[0]);
+    float[] questnavPosition = getOculusPos();
+    return new Translation2d(questnavPosition[0], questnavPosition[1]);
   }
 
   private Pose2d getQuestNavPose() {
-    var oculousPositionCompensated = getQuestNavTranslation();
-    return new Pose2d(oculousPositionCompensated, Rotation2d.fromDegrees(getOculusYaw()));
+    return new Pose2d(getQuestNavTranslation(), Rotation2d.fromDegrees(getOculusYaw()));
   }
 }

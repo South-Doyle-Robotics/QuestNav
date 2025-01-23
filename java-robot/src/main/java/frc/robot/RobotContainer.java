@@ -51,6 +51,7 @@ public class RobotContainer {
   private final DriveSubsystem m_robotDrive;
   ShuffleboardTab m_qnavtab = Shuffleboard.getTab("QuestNav");
   GenericEntry m_qnavConnectedStatus = m_qnavtab.add("Connected", false).withWidget(BuiltInWidgets.kBooleanBox).getEntry();
+  GenericEntry m_qnavConnected = m_qnavtab.add("QuestNav Connected?", "!!NOT CONNECTED!!").withWidget(BuiltInWidgets.kTextView).withSize(3, 1).getEntry();
 
   // The driver's controller
   XboxController m_driverController = new XboxController(OIConstants.kDriverControllerPort);
@@ -75,7 +76,7 @@ public class RobotContainer {
                 -MathUtil.applyDeadband(m_driverController.getLeftY(), OIConstants.kDriveDeadband),
                 -MathUtil.applyDeadband(m_driverController.getLeftX(), OIConstants.kDriveDeadband),
                 -MathUtil.applyDeadband(m_driverController.getRightX(), OIConstants.kHeadingDeadband),
-                true, true),
+                true, false),
             m_robotDrive));
   }
 
@@ -93,7 +94,10 @@ public class RobotContainer {
         .onTrue(new InstantCommand(() -> m_robotDrive.setX(), m_robotDrive));
 
     new JoystickButton(m_driverController, Button.kY.value)
-        .onTrue(new InstantCommand(() -> m_robotDrive.zeroHeading(), m_robotDrive));
+        .onTrue(new InstantCommand(() -> {
+          m_robotDrive.zeroHeading();
+          m_robotDrive.zeroPosition();
+        }, m_robotDrive));
 
     new JoystickButton(m_driverController, Button.kA.value)
         .onTrue(new InstantCommand(() ->  {
@@ -128,5 +132,4 @@ public class RobotContainer {
   public DriveSubsystem getDriveSubsystem() {
     return m_robotDrive;
   }
-
 }

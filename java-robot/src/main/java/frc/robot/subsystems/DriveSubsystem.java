@@ -95,7 +95,9 @@ public class DriveSubsystem extends SubsystemBase {
   public DriveSubsystem() {
     anglePIDController.enableContinuousInput(-180, 180);
     // m_questNav.setInitialPose(new Pose2d(new Translation2d(0, 0), new Rotation2d()));
+    setQuestConnectionStatus(false);
     zeroHeading();
+    zeroPosition();
 
     // PPlanner Config
     RobotConfig ppconfig = null;
@@ -107,7 +109,7 @@ public class DriveSubsystem extends SubsystemBase {
 
     AutoBuilder.configure(
             this::getPose, // Robot pose supplier
-            this::resetQuestNav, // Method to reset odometry (will be called if your auto has a starting pose)
+            this::setPose, // Method to reset odometry (will be called if your auto has a starting pose)
             this::getSpeeds, // ChassisSpeeds supplier. MUST BE ROBOT RELATIVE
             (speeds, feedforwards) -> setSpeeds(speeds), // Method that will drive the robot given ROBOT RELATIVE ChassisSpeeds. Also optionally outputs individual module feedforwards
             new PPHolonomicDriveController( // PPHolonomicController is the built in path following controller for holonomic drive trains
@@ -156,6 +158,11 @@ public class DriveSubsystem extends SubsystemBase {
     GenericEntry state = ShuffleUtils.getEntryByName(Shuffleboard.getTab("QuestNav"), "Connected");
     if (state != null)
       state.setBoolean(connected);
+
+    GenericEntry textState = ShuffleUtils.getEntryByName(Shuffleboard.getTab("QuestNav"), "QuestNav Connected?");
+    if (textState != null) {
+      textState.setString(connected ? "^ CONNECTED ^" : "!!NOT CONNECTED!!");
+    }
   }
 
   public void questNavTestMessage() {
@@ -198,8 +205,12 @@ public class DriveSubsystem extends SubsystemBase {
         pose);
   }
 
-  public void resetQuestNav(Pose2d pose) {
-    m_questNav.setInitialPose(pose);
+  public void setPose(Pose2d pose) {
+    m_angleSetpoint -= m_questNav.getPose().getRotation().getDegrees();
+    m_angleSetpoint += pose.getRotation().getDegrees();
+    anglePIDController.setSetpoint(0.0);
+    m_questNav.setPose(pose);
+
   }
 
   /**
@@ -353,17 +364,17 @@ public class DriveSubsystem extends SubsystemBase {
     return m_questNav.getPose().getRotation().getDegrees() * (DriveConstants.kGyroReversed ? -1.0 : 1.0);
   }
 
-  public void zeroPosition() {
-    m_questNav.resetPose();
-  }
-
   public void cleanupQuestNavMessages() {
     m_questNav.cleanUpQuestNavMessages();
   }
-
+  
   public void zeroHeading() {
     m_angleSetpoint -= m_questNav.getPose().getRotation().getDegrees();
     anglePIDController.setSetpoint(0.0);
     m_questNav.zeroHeading();
+  }
+
+  public void zeroPosition() {
+    m_questNav.zeroPosition();
   }
 }
